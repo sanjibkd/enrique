@@ -1,5 +1,6 @@
 from nose.tools import *
 import numpy as np
+import time
 
 from magellan.tests import mg
 
@@ -65,3 +66,27 @@ def test_ab_block_candset_wi_no_tuples():
     assert_equal(D.get_key(), '_id')
     assert_equal(D.get_property('foreign_key_ltable'), 'ltable.ID')
     assert_equal(D.get_property('foreign_key_rtable'), 'rtable.ID')
+
+def test_ab_block_tables_skd():
+    start_time = time.time()
+    A = mg.load_dataset('table_A')
+    a_load_time = time.time()
+    print("Loading table A --- %s seconds ---" % (a_load_time - start_time))
+    B = mg.load_dataset('table_B')
+    b_load_time = time.time()
+    print("Loading table B --- %s seconds ---" % (b_load_time - a_load_time))
+    ab = mg.AttrEquivalenceBlocker()
+    ab_time = time.time()
+    print("Created an AE blocker --- %s seconds ---" % (ab_time - b_load_time))
+    C = ab.block_tables(A, B, 'zipcode', 'zipcode', 'zipcode', 'zipcode')
+    c_time = time.time()
+    print("Block tables --- %s seconds ---" % (c_time - ab_time))
+
+    s1 = sorted(['_id', 'ltable.ID', 'rtable.ID', 'ltable.zipcode', 'rtable.zipcode'])
+    assert_equal(s1, sorted(C.columns))
+    assert_equal(C.get_key(), '_id')
+    assert_equal(C.get_property('foreign_key_ltable'), 'ltable.ID')
+    assert_equal(C.get_property('foreign_key_rtable'), 'rtable.ID')
+    k1 = np.array(C[['ltable.zipcode']])
+    k2 = np.array(C[['rtable.zipcode']])
+    assert_equal(all(k1 == k2), True)
