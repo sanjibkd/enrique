@@ -318,13 +318,22 @@ class AttrEquivalenceBlocker(Blocker):
 
 
     def block_data_frames_skd(self, args):
+	t0 = time.time()
         l_df, r_df, l_block_attr, r_block_attr, l_key, r_key, l_output_attrs, r_output_attrs = args
+	t1 = time.time()
         candset = pd.merge(l_df, r_df, left_on=l_block_attr, right_on=r_block_attr,
                            suffixes=('_ltable', '_rtable'))
+	t2 = time.time()
         # get retain columns
         retain_cols = self.get_retain_cols(l_key, r_key, list(candset.columns),
                                                    l_output_attrs, r_output_attrs)
+	t3 = time.time()
         candset = candset[retain_cols]
+	t4 = time.time()
+	print "Time taken to extract args:", (t1 - t0)
+	print "Time taken to pd merge:", (t2 - t1)
+	print "Time taken to get out cols:", (t3 - t2)
+	print "Time taken to project cols:", (t4 - t3)
         return candset
 
     def block_tables_skd(self, ltable, rtable, l_block_attr, r_block_attr,
@@ -370,15 +379,15 @@ class AttrEquivalenceBlocker(Blocker):
         
 	print 'cpu_count() = %d\n' % multiprocessing.cpu_count() 
         t0 = time.time() 
-        l_splits = np.array_split(l_df, 2)
+        l_splits = np.array_split(l_df, 4)
 	t1 = time.time()
-        r_splits = np.array_split(r_df, 2)
+        r_splits = np.array_split(r_df, 4)
 	t2 = time.time()
         l_key = ltable.get_key()
         r_key = rtable.get_key()
         lr_splits = [(l, r, l_block_attr, r_block_attr, l_key, r_key, l_output_attrs, r_output_attrs) for l in l_splits for r in r_splits]
 	t3 = time.time()
-        pool = Pool(4)
+        pool = Pool(16)
 	t4 = time.time()
         c_splits = pool.map(self.block_data_frames_skd, lr_splits)
 	t5 = time.time()
@@ -408,6 +417,41 @@ class AttrEquivalenceBlocker(Blocker):
         candset.set_property('foreign_key_ltable', 'ltable.'+ltable.get_key())
         candset.set_property('foreign_key_rtable', 'rtable.'+rtable.get_key())
         return candset
+
+    def get_valid_ids(self, c_df, l_df, r_df, l_key, r_key, l_block_attr, r_block_attr):
+	print "l_key: ", l_key, "r_key: ", r_key, "l_block_attr: ", l_block_attr, "r_block_attr: ", r_block_attr
+        #if mg._verbose:
+        #    count = 0
+        #    per_count = math.ceil(mg._percent/100.0*len(c_df))
+        #    print per_count
+
+        #elif mg._progbar:
+        #    bar = pyprind.ProgBar(len(c_df))
+
+
+        # keep track of valid ids
+        valid = []
+        # iterate candidate set and process each row
+        for idx, row in c_df.iterrows():
+
+            #if mg._verbose:
+            #    count += 1
+            #    if count%per_count == 0:
+            #        print str(mg._percent*count/per_count) + ' percentage done !!!'
+            #elif mg._progbar:
+            #    bar.update()
+
+            # get the value of block attribute from ltuple
+            l_val = l_df.ix[row[l_key], l_block_attr]
+            r_val = r_df.ix[row[r_key], r_block_attr]
+            if l_val != np.NaN and r_val != np.NaN:
+                if l_val == r_val:
+                    valid.append(True)
+                else:
+                    valid.append(False)
+            else:
+                valid.append(False)
+	return valid
 
     def block_candset_skd(self, vtable, l_block_attr, r_block_attr):
         """
@@ -455,38 +499,9 @@ class AttrEquivalenceBlocker(Blocker):
         l_df.set_index(ltable.get_key(), inplace=True)
         r_df.set_index(rtable.get_key(), inplace=True)
 
-        if mg._verbose:
-            count = 0
-            per_count = math.ceil(mg._percent/100.0*len(vtable))
-            print per_count
-
-        elif mg._progbar:
-            bar = pyprind.ProgBar(len(vtable))
-
-
-        # keep track of valid ids
-        valid = []
-        # iterate candidate set and process each row
-        for idx, row in vtable.iterrows():
-
-            if mg._verbose:
-                count += 1
-                if count%per_count == 0:
-                    print str(mg._percent*count/per_count) + ' percentage done !!!'
-            elif mg._progbar:
-                bar.update()
-
-            # get the value of block attribute from ltuple
-            l_val = l_df.ix[row[l_key], l_block_attr]
-            r_val = r_df.ix[row[r_key], r_block_attr]
-            if l_val != np.NaN and r_val != np.NaN:
-                if l_val == r_val:
-                    valid.append(True)
-                else:
-                    valid.append(False)
-            else:
-                valid.append(False)
-        
+	c_df = vtable.to_dataframe()
+        valid = self.get_valid_ids(c_df, l_df, r_df, l_key, r_key, l_block_attr, r_block_attr)
+ 
         # should be modified
         if len(vtable) > 0:
             out_table = MTable(vtable[valid], key=vtable.get_key())
