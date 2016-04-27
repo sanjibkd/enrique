@@ -109,7 +109,7 @@ def test_ab_block_candset_skd():
     B = mg.load_dataset('bikewale_clean', 'ID')
     ab = mg.AttrEquivalenceBlocker()
     #C = ab.block_tables(A, B, 'zipcode', 'zipcode', ['zipcode', 'birth_year'], ['zipcode', 'birth_year'])
-    C = ab.block_tables(A, B, 'city_posted', 'city_posted',
+    C = ab.block_tables_skd(A, B, 'city_posted', 'city_posted',
 	['bike_name', 'city_posted', 'km_driven', 'price', 'color', 'model_year'],
 	['bike_name', 'city_posted', 'km_driven', 'price', 'color', 'model_year'])
     print "Size of C: ", len(C)

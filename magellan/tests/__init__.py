@@ -7,8 +7,8 @@ import jpype
 p = mg.get_install_path()
 path_for_A = os.sep.join([p, 'datasets', 'table_A.csv'])
 path_for_B = os.sep.join([p, 'datasets', 'table_B.csv'])
-print path_for_A
-print path_for_B
+#print path_for_A
+#print path_for_B
 # mg.init_jvm('/Library/Java/JavaVirtualMachines/jdk1.8.0_45.jdk/Contents/Home/jre/lib/server/libjvm.dylib')
 jvm_path = jpype.get_default_jvm_path()
 if os.path.isfile(jvm_path):
