@@ -103,18 +103,31 @@ def test_ab_block_tables_skd():
     assert_equal(all(k1 == k2), True)
 
 def test_ab_block_candset_skd():
-    A = mg.load_dataset('table_A')
-    B = mg.load_dataset('table_B')
+    #A = mg.load_dataset('table_A')
+    A = mg.load_dataset('bikedekho_clean', 'ID')
+    #B = mg.load_dataset('table_B')
+    B = mg.load_dataset('bikewale_clean', 'ID')
     ab = mg.AttrEquivalenceBlocker()
-    C = ab.block_tables(A, B, 'zipcode', 'zipcode', ['zipcode', 'birth_year'], ['zipcode', 'birth_year'])
-    D = ab.block_candset(C, 'birth_year', 'birth_year')
+    #C = ab.block_tables(A, B, 'zipcode', 'zipcode', ['zipcode', 'birth_year'], ['zipcode', 'birth_year'])
+    C = ab.block_tables(A, B, 'city_posted', 'city_posted',
+	['bike_name', 'city_posted', 'km_driven', 'price', 'color', 'model_year'],
+	['bike_name', 'city_posted', 'km_driven', 'price', 'color', 'model_year'])
+    print "Size of C: ", len(C)
+    #D = ab.block_candset_skd(C, 'birth_year', 'birth_year')
+    D = ab.block_candset_skd(C, 'model_year', 'model_year')
     print "Size of D: ", len(D)
-    s1 = sorted(['_id', 'ltable.ID', 'rtable.ID', 'ltable.zipcode', 'ltable.birth_year', 'rtable.zipcode',
-                 'rtable.birth_year'])
+    #s1 = sorted(['_id', 'ltable.ID', 'rtable.ID', 'ltable.zipcode', 'ltable.birth_year', 'rtable.zipcode',
+    #             'rtable.birth_year'])
+    s1 = sorted(['_id', 'ltable.ID', 'rtable.ID', 'ltable.bike_name', 'ltable.city_posted',
+	'ltable.km_driven', 'ltable.price', 'ltable.color', 'ltable.model_year',
+	'rtable.bike_name', 'rtable.city_posted', 'rtable.km_driven', 'rtable.price',
+	'rtable.color', 'rtable.model_year'])
     assert_equal(s1, sorted(D.columns))
     assert_equal(D.get_key(), '_id')
     assert_equal(D.get_property('foreign_key_ltable'), 'ltable.ID')
     assert_equal(D.get_property('foreign_key_rtable'), 'rtable.ID')
-    k1 = np.array(D[['ltable.birth_year']])
-    k2 = np.array(D[['rtable.birth_year']])
+    #k1 = np.array(D[['ltable.birth_year']])
+    k1 = np.array(D[['ltable.model_year']])
+    #k2 = np.array(D[['rtable.birth_year']])
+    k2 = np.array(D[['rtable.model_year']])
     assert_equal(all(k1 == k2), True)

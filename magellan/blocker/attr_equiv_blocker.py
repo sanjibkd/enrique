@@ -9,8 +9,11 @@ import math
 import pyprind
 
 import multiprocessing
-from multiprocessing.dummy import Pool
+from multiprocessing import Pool
+#from multiprocessing.dummy import Pool
 import time
+import pathos.multiprocessing as mp
+from itertools import chain
     
 #def block_data_frames_skd(args_tuple):
 #    l_df, r_df, l_block_attr, r_block_attr = args_tuple
@@ -379,15 +382,15 @@ class AttrEquivalenceBlocker(Blocker):
         
 	print 'cpu_count() = %d\n' % multiprocessing.cpu_count() 
         t0 = time.time() 
-        l_splits = np.array_split(l_df, 4)
+        l_splits = np.array_split(l_df, 2)
 	t1 = time.time()
-        r_splits = np.array_split(r_df, 4)
+        r_splits = np.array_split(r_df, 2)
 	t2 = time.time()
         l_key = ltable.get_key()
         r_key = rtable.get_key()
         lr_splits = [(l, r, l_block_attr, r_block_attr, l_key, r_key, l_output_attrs, r_output_attrs) for l in l_splits for r in r_splits]
 	t3 = time.time()
-        pool = Pool(16)
+        pool = Pool(4)
 	t4 = time.time()
         c_splits = pool.map(self.block_data_frames_skd, lr_splits)
 	t5 = time.time()
@@ -418,15 +421,16 @@ class AttrEquivalenceBlocker(Blocker):
         candset.set_property('foreign_key_rtable', 'rtable.'+rtable.get_key())
         return candset
 
-    def get_valid_ids(self, c_df, l_df, r_df, l_key, r_key, l_block_attr, r_block_attr):
-	print "l_key: ", l_key, "r_key: ", r_key, "l_block_attr: ", l_block_attr, "r_block_attr: ", r_block_attr
-        #if mg._verbose:
-        #    count = 0
-        #    per_count = math.ceil(mg._percent/100.0*len(c_df))
-        #    print per_count
+    def get_valid_ids(self, args):
+        c_df, l_df, r_df, l_key, r_key, l_block_attr, r_block_attr = args
+	#print "l_key: ", l_key, "r_key: ", r_key, "l_block_attr: ", l_block_attr, "r_block_attr: ", r_block_attr
+        if mg._verbose:
+            count = 0
+            per_count = math.ceil(mg._percent/100.0*len(c_df))
+            print per_count
 
-        #elif mg._progbar:
-        #    bar = pyprind.ProgBar(len(c_df))
+        elif mg._progbar:
+            bar = pyprind.ProgBar(len(c_df))
 
 
         # keep track of valid ids
@@ -434,12 +438,12 @@ class AttrEquivalenceBlocker(Blocker):
         # iterate candidate set and process each row
         for idx, row in c_df.iterrows():
 
-            #if mg._verbose:
-            #    count += 1
-            #    if count%per_count == 0:
-            #        print str(mg._percent*count/per_count) + ' percentage done !!!'
-            #elif mg._progbar:
-            #    bar.update()
+            if mg._verbose:
+                count += 1
+                if count%per_count == 0:
+                    print str(mg._percent*count/per_count) + ' percentage done !!!'
+            elif mg._progbar:
+                bar.update()
 
             # get the value of block attribute from ltuple
             l_val = l_df.ix[row[l_key], l_block_attr]
@@ -483,6 +487,7 @@ class AttrEquivalenceBlocker(Blocker):
             * foreign_key_ltable - string, ltable's  id attribute name
             * foreign_key_rtable - string, rtable's id attribute name
         """
+	start_time = time.time()
         # do integrity checks
         ltable = vtable.get_property('ltable')
         rtable = vtable.get_property('rtable')
@@ -499,8 +504,31 @@ class AttrEquivalenceBlocker(Blocker):
         l_df.set_index(ltable.get_key(), inplace=True)
         r_df.set_index(rtable.get_key(), inplace=True)
 
+	cpu_count = multiprocessing.cpu_count() 
+        #pool = Pool(4)
+        pool = mp.ProcessingPool(cpu_count + 1)
 	c_df = vtable.to_dataframe()
-        valid = self.get_valid_ids(c_df, l_df, r_df, l_key, r_key, l_block_attr, r_block_attr)
+	t0 = time.time()
+        c_splits = np.array_split(c_df, cpu_count + 1)
+	t1 = time.time()
+	#print "Time taken to split table C:", (t1 - t0)
+        args_splits = [(c, l_df, r_df, l_key, r_key, l_block_attr, r_block_attr) for c in c_splits]
+	t2 = time.time()
+	#print "Time taken to get args splits:", (t2 - t1)
+        valid_splits = pool.map(self.get_valid_ids, args_splits)
+	t3 = time.time()
+	#print "Time taken to get valid splits:", (t3 - t2)
+        pool.close()
+	t4 = time.time()
+	#print "Time taken to close    pool:", (t4 - t3)
+        pool.join() 
+	t5 = time.time()
+	#print "Time taken to join     pool:", (t5 - t4)
+        #valid = pd.concat(valid_splits, ignore_index=True)
+	#valid = list(chain(valid_splits))
+	valid = sum(valid_splits, [])
+	t6 = time.time()
+	#print "Time taken to combine valid splits:", (t6 - t5)
  
         # should be modified
         if len(vtable) > 0:
@@ -511,4 +539,6 @@ class AttrEquivalenceBlocker(Blocker):
         out_table.set_property('rtable', rtable)
         out_table.set_property('foreign_key_ltable', 'ltable.'+ltable.get_key())
         out_table.set_property('foreign_key_rtable', 'rtable.'+rtable.get_key())
+	end_time = time.time()
+	print "Time taken to block candset:", (end_time - start_time)
         return out_table
