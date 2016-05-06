@@ -1,6 +1,7 @@
 #imports
 import pandas as pd
 import numpy as np
+from joblib import Parallel, delayed
 
 from magellan.blocker.blocker import Blocker
 from magellan.core.mtable import MTable
@@ -20,6 +21,41 @@ from itertools import chain
 #    candset = pd.merge(l_df, r_df, left_on=l_block_attr, right_on=r_block_attr,
 #                       suffixes=('_ltable', '_rtable'))
 #    return candset
+
+def get_valid(c_df, l_dict, r_dict, l_key_idx, r_key_idx):
+    print "l_key_idx: ", l_key_idx, "r_key_idx: ", r_key_idx
+    if mg._verbose:
+        count = 0
+    	per_count = math.ceil(mg._percent/100.0*len(c_df))
+    	print per_count
+
+    elif mg._progbar:
+    	bar = pyprind.ProgBar(len(c_df))
+
+    # keep track of valid ids
+    valid = []
+
+    # iterate candidate set and process each row
+    for row in c_df.itertuples(index=False):
+
+    	if mg._verbose:
+	    count += 1
+	    if count%per_count == 0:
+	        print str(mg._percent*count/per_count) + ' percentage done !!!'
+    	elif mg._progbar:
+	    bar.update()
+
+    	# get the value of block attribute from ltuple
+    	l_val = l_dict[row[l_key_idx]]
+
+    	# get the value of block attribute from rtuple
+    	r_val = r_dict[row[r_key_idx]]
+
+    	if l_val != np.NaN and r_val != np.NaN and l_val == r_val:
+	    valid.append(True)
+    	else:
+	    valid.append(False)
+    return valid
 
 class AttrEquivalenceBlocker(Blocker):
 
@@ -67,6 +103,7 @@ class AttrEquivalenceBlocker(Blocker):
 	t0 = time.time()
         candset = pd.merge(l_df, r_df, left_on=l_block_attr, right_on=r_block_attr,
                            suffixes=('_ltable', '_rtable'))
+	print list(candset)
 	t1 = time.time()
         # get output columns
         retain_cols, final_cols = self.output_columns(ltable.get_key(), rtable.get_key(), list(candset.columns),
@@ -267,10 +304,10 @@ class AttrEquivalenceBlocker(Blocker):
 
         # retain output attrs from merge
         if l_output_attrs:
-            ret_l_col = [self.retain_names(x, col_names, '_ltable') for x in l_output_attrs]
+            ret_l_col = [self.retain_names(x, col_names, '_ltable') for x in l_output_attrs if x not in [l_key]]
             ret_cols.extend(ret_l_col)
         if r_output_attrs:
-            ret_r_col = [self.retain_names(x, col_names, '_rtable') for x in r_output_attrs]
+            ret_r_col = [self.retain_names(x, col_names, '_rtable') for x in r_output_attrs if x not in [r_key]]
             ret_cols.extend(ret_r_col)
 
         # final columns in the output
@@ -281,10 +318,10 @@ class AttrEquivalenceBlocker(Blocker):
 
         # final output attrs from merge
         if l_output_attrs:
-            fin_l_col = [self.final_names(x, 'ltable.') for x in l_output_attrs]
+            fin_l_col = [self.final_names(x, 'ltable.') for x in l_output_attrs if x not in [l_key]]
             fin_cols.extend(fin_l_col)
         if r_output_attrs:
-            fin_r_col = [self.final_names(x, 'rtable.') for x in r_output_attrs]
+            fin_r_col = [self.final_names(x, 'rtable.') for x in r_output_attrs if x not in [r_key]]
             fin_cols.extend(fin_r_col)
 
         return ret_cols, fin_cols
@@ -300,10 +337,10 @@ class AttrEquivalenceBlocker(Blocker):
 
         # retain output attrs from merge
         if l_output_attrs:
-            ret_l_col = [self.retain_names(x, col_names, '_ltable') for x in l_output_attrs]
+            ret_l_col = [self.retain_names(x, col_names, '_ltable') for x in l_output_attrs if x not in [l_key]]
             ret_cols.extend(ret_l_col)
         if r_output_attrs:
-            ret_r_col = [self.retain_names(x, col_names, '_rtable') for x in r_output_attrs]
+            ret_r_col = [self.retain_names(x, col_names, '_rtable') for x in r_output_attrs if x not in [r_key]]
             ret_cols.extend(ret_r_col)
 	return ret_cols
 
@@ -317,10 +354,10 @@ class AttrEquivalenceBlocker(Blocker):
 
         # final output attrs from merge
         if l_output_attrs:
-            fin_l_col = [self.final_names(x, 'ltable.') for x in l_output_attrs]
+            fin_l_col = [self.final_names(x, 'ltable.') for x in l_output_attrs if x not in [l_key]]
             fin_cols.extend(fin_l_col)
         if r_output_attrs:
-            fin_r_col = [self.final_names(x, 'rtable.') for x in r_output_attrs]
+            fin_r_col = [self.final_names(x, 'rtable.') for x in r_output_attrs if x not in [r_key]]
             fin_cols.extend(fin_r_col)
 	return fin_cols
 
@@ -333,17 +370,28 @@ class AttrEquivalenceBlocker(Blocker):
     def final_names(self, x, prefix):
         return prefix + str(x)
 
-
     def block_data_frames_skd(self, args):
 	t0 = time.time()
         l_df, r_df, l_block_attr, r_block_attr, l_key, r_key, l_output_attrs, r_output_attrs = args
 	t1 = time.time()
-        candset = pd.merge(l_df, r_df, left_on=l_block_attr, right_on=r_block_attr,
+	l_output_attrs_1 = l_output_attrs;
+	if l_key not in l_output_attrs_1:
+ 	    l_output_attrs_1.append(l_key)
+	if l_block_attr not in l_output_attrs_1:
+ 	    l_output_attrs_1.append(l_block_attr)
+	r_output_attrs_1 = r_output_attrs;
+	if r_key not in r_output_attrs_1:
+ 	    r_output_attrs_1.append(r_key)
+	if r_block_attr not in r_output_attrs_1:
+ 	    r_output_attrs_1.append(r_block_attr)
+	l_df_1 = l_df[l_output_attrs_1]
+	r_df_1 = r_df[r_output_attrs_1]
+        candset = pd.merge(l_df_1, r_df_1, left_on=l_block_attr, right_on=r_block_attr,
                            suffixes=('_ltable', '_rtable'))
 	t2 = time.time()
         # get retain columns
         retain_cols = self.get_retain_cols(l_key, r_key, list(candset.columns),
-                                                   l_output_attrs, r_output_attrs)
+                                                   l_output_attrs_1, r_output_attrs_1)
 	t3 = time.time()
         candset = candset[retain_cols]
 	t4 = time.time()
@@ -443,30 +491,49 @@ class AttrEquivalenceBlocker(Blocker):
     def get_valid_ids(self, args):
         c_df, l_df, r_df, l_key, r_key, l_block_attr, r_block_attr = args
 	#print "l_key: ", l_key, "r_key: ", r_key, "l_block_attr: ", l_block_attr, "r_block_attr: ", r_block_attr
-        #if mg._verbose:
-        #    count = 0
-        #    per_count = math.ceil(mg._percent/100.0*len(c_df))
-        #    print per_count
+        if mg._verbose:
+            count = 0
+            per_count = math.ceil(mg._percent/100.0*len(c_df))
+            print per_count
 
-        #elif mg._progbar:
-        #    bar = pyprind.ProgBar(len(c_df))
+        elif mg._progbar:
+            bar = pyprind.ProgBar(len(c_df))
 
+        column_names = list(c_df)
+        lid_idx = column_names.index(l_key)
+        rid_idx = column_names.index(r_key)
+	l_block_attr_idx = column_names.index('ltable.' + l_block_attr)
+	r_block_attr_idx = column_names.index('rtable.' + r_block_attr)
+
+        # create look up table for quick access of rows
+        l_dict = {}
+        r_dict = {}
 
         # keep track of valid ids
         valid = []
-        # iterate candidate set and process each row
-        for idx, row in c_df.iterrows():
 
-            #if mg._verbose:
-            #    count += 1
-            #    if count%per_count == 0:
-            #        print str(mg._percent*count/per_count) + ' percentage done !!!'
-            #elif mg._progbar:
-            #    bar.update()
+        # iterate candidate set and process each row
+        for row in c_df.itertuples(index=False):
+
+            if mg._verbose:
+                count += 1
+                if count%per_count == 0:
+                    print str(mg._percent*count/per_count) + ' percentage done !!!'
+            elif mg._progbar:
+                bar.update()
 
             # get the value of block attribute from ltuple
-            l_val = l_df.ix[row[l_key], l_block_attr]
-            r_val = r_df.ix[row[r_key], r_block_attr]
+	    row_lid = row[lid_idx]
+	    if row_lid not in l_dict:
+		l_dict[row_lid] = row[l_block_attr_idx]
+            l_val = l_dict[row_lid]
+
+            # get the value of block attribute from rtuple
+	    row_rid = row[rid_idx]
+	    if row_rid not in r_dict:
+		r_dict[row_rid] = row[r_block_attr_idx]
+            r_val = r_dict[row_rid]
+
             if l_val != np.NaN and r_val != np.NaN:
                 if l_val == r_val:
                     valid.append(True)
@@ -561,6 +628,461 @@ class AttrEquivalenceBlocker(Blocker):
 	valid = sum(valid_splits, [])
 	t6 = time.time()
 	print "Time taken to combine valid splits:", (t6 - t5)
+ 
+        # should be modified
+        if len(vtable) > 0:
+            out_table = MTable(vtable[valid], key=vtable.get_key())
+        else:
+            out_table = MTable(columns=vtable.columns, key=vtable.get_key())
+	t7 = time.time()
+	print "Time taken to create mtable from data frame:", (t7 - t6)
+        out_table.set_property('ltable', ltable)
+        out_table.set_property('rtable', rtable)
+        out_table.set_property('foreign_key_ltable', 'ltable.'+ltable.get_key())
+        out_table.set_property('foreign_key_rtable', 'rtable.'+rtable.get_key())
+	end_time = time.time()
+	print "Time taken to set properties of mtable:", (end_time - t7)
+	print "Time taken to block candset:", (end_time - start_time)
+        return out_table
+
+    def block_tables_opt(self, ltable, rtable, l_block_attr, r_block_attr,
+                     l_output_attrs=None, r_output_attrs=None):
+        """
+        Block tables based on l_block_attr, r_block_attr equivalence (similar to equi-join)
+
+        Parameters
+        ----------
+        ltable, rtable : MTable
+            Input MTables
+        l_block_attr, r_block_attr : string,
+            attribute names in ltable, rtable
+        l_output_attrs, r_output_attrs : list (of strings), defaults to None
+            attribute names to be included in the output table
+
+        Returns
+        -------
+        blocked_table : MTable
+            Containing tuple pairs whose l_block_attr and r_block_attr values are same
+
+        Notes
+        -----
+        Output MTable contains the following three attributes
+            * _id
+            * id column from ltable
+            * id column from rtable
+
+        Also, the properties of blocked table is updated with following key-value pairs
+            * ltable - ref to ltable
+            * rtable - ref to rtable
+            * key
+            * foreign_key_ltable - string, ltable's  id attribute name
+            * foreign_key_rtable - string, rtable's id attribute name
+        """
+
+        # do integrity checks
+        l_output_attrs, r_output_attrs = self.check_attrs(ltable, rtable, l_block_attr, r_block_attr,
+                                                     l_output_attrs, r_output_attrs)
+        # remove nans
+        l_df = self.rem_nan(ltable, l_block_attr)
+        r_df = self.rem_nan(rtable, r_block_attr)
+	
+	t00 = time.time()
+	lk = ltable.get_key()
+	l_output_attrs_1 = l_output_attrs;
+	if lk not in l_output_attrs_1:
+ 	    l_output_attrs_1.append(lk)
+	if l_block_attr not in l_output_attrs_1:
+ 	    l_output_attrs_1.append(l_block_attr)
+
+	r_output_attrs_1 = r_output_attrs
+	rk = rtable.get_key()
+	if rk not in r_output_attrs_1:
+ 	    r_output_attrs_1.append(rk)
+	if r_block_attr not in r_output_attrs_1:
+ 	    r_output_attrs_1.append(r_block_attr)
+
+	print l_output_attrs_1
+	print r_output_attrs_1
+
+	l_df_1 = l_df[l_output_attrs_1]
+	r_df_1 = r_df[r_output_attrs_1]
+	
+	#l_df_1.set_index(l_block_attr)
+	#r_df_1.set_index(r_block_attr)
+	t0 = time.time()
+        candset = pd.merge(l_df_1, r_df_1, left_on=l_block_attr, right_on=r_block_attr,
+                           suffixes=('_ltable', '_rtable'))
+	print list(candset)
+	t1 = time.time()
+        # get output columns
+        retain_cols, final_cols = self.output_columns(ltable.get_key(), rtable.get_key(), list(candset.columns),
+                                                   l_output_attrs, r_output_attrs)
+	print "retain_cols: ", retain_cols
+	print "final_cols: ", final_cols
+
+	t2 = time.time()
+        candset = candset[retain_cols]
+	t3 = time.time()
+        candset.columns = final_cols
+	t4 = time.time()
+        candset = MTable(candset)
+	t5 = time.time()
+
+        # set metadata
+        candset.set_property('ltable', ltable)
+        candset.set_property('rtable', rtable)
+        candset.set_property('foreign_key_ltable', 'ltable.'+ltable.get_key())
+        candset.set_property('foreign_key_rtable', 'rtable.'+rtable.get_key())	
+	t6 = time.time()
+	print "Time taken to project A and B:", (t0 - t00)
+	print "Time taken to merge A and B:", (t1 - t0)
+	print "Time taken to get output cols:", (t2 - t1)
+	print "Time taken to project C cols:", (t3 - t2)
+	print "Time taken to set C final cols:", (t4 - t3)
+	print "Time taken to create table C:", (t5 - t4)
+	print "Time taken to set props for C:", (t6 - t5)
+
+        return candset
+
+    # blocking over candidate set
+    def block_candset_opt(self, vtable, l_block_attr, r_block_attr):
+        """
+        Block candidate set (virtual MTable) based on l_block_attr, r_block_attr equivalence (similar to equi-join)
+
+        Parameters
+        ----------
+        vtable : MTable
+            Input candidate set
+        l_block_attr, r_block_attr : string,
+            attribute names in ltable, rtable
+
+        Returns
+        -------
+        blocked_table : MTable
+            Containing tuple pairs whose l_block_attr and r_block_attr values are same
+
+        Notes
+        -----
+        Output MTable contains the following three attributes
+            * _id
+            * id column from ltable
+            * id column from rtable
+
+        Also, the properties of blocked table is updated with following key-value pairs
+            * ltable - ref to ltable
+            * rtable - ref to rtable
+            * key
+            * foreign_key_ltable - string, ltable's  id attribute name
+            * foreign_key_rtable - string, rtable's id attribute name
+        """
+	start_time = time.time()
+        # do integrity checks
+        ltable = vtable.get_property('ltable')
+        rtable = vtable.get_property('rtable')
+
+        self.check_attrs(ltable, rtable, l_block_attr, r_block_attr, None, None)
+        l_key = 'ltable.' + ltable.get_key()
+        r_key = 'rtable.' + rtable.get_key()
+
+	t000 = time.time()
+	print "Time taken to do integrity checks:", (t000 - start_time)
+        # convert to dataframes
+        l_df = ltable.to_dataframe()
+        r_df = rtable.to_dataframe()
+
+	t001 = time.time()
+	print "Time taken to convert tables A and B to data frames:", (t001 - t000)
+        # set index for convenience
+        l_df.set_index(ltable.get_key(), inplace=True)
+        r_df.set_index(rtable.get_key(), inplace=True)
+
+	t002 = time.time()
+	print "Time taken to set indexes for tables A and B:", (t002 - t001)
+        if mg._verbose:
+            count = 0
+            per_count = math.ceil(mg._percent/100.0*len(vtable))
+            print per_count
+
+        elif mg._progbar:
+            bar = pyprind.ProgBar(len(vtable))
+
+        column_names = list(vtable.columns)
+        lid_idx = column_names.index(l_key)
+        rid_idx = column_names.index(r_key)
+	l_block_attr_idx = column_names.index('ltable.' + l_block_attr)
+	r_block_attr_idx = column_names.index('rtable.' + r_block_attr)
+
+        # create look up table for quick access of rows
+        l_dict = {}
+        r_dict = {}
+
+        # keep track of valid ids
+        valid = []
+        # iterate candidate set and process each row
+        for row in vtable.itertuples(index=False):
+            if mg._verbose:
+                count += 1
+                if count%per_count == 0:
+                    print str(mg._percent*count/per_count) + ' percentage done !!!'
+            elif mg._progbar:
+                bar.update()
+
+            # get the value of block attribute from ltuple
+	    row_lid = row[lid_idx]
+	    if row_lid not in l_dict:
+		l_dict[row_lid] = row[l_block_attr_idx]
+            l_val = l_dict[row_lid]
+
+            # get the value of block attribute from rtuple
+	    row_rid = row[rid_idx]
+	    if row_rid not in r_dict:
+		r_dict[row_rid] = row[r_block_attr_idx]
+            r_val = r_dict[row_rid]
+
+            if l_val != np.NaN and r_val != np.NaN:
+                if l_val == r_val:
+                    valid.append(True)
+                else:
+                    valid.append(False)
+            else:
+                valid.append(False)
+        
+	t6 = time.time()
+	print "Time taken to get valid ids:", (t6 - t002)
+        # should be modified
+        if len(vtable) > 0:
+            out_table = MTable(vtable[valid], key=vtable.get_key())
+        else:
+            out_table = MTable(columns=vtable.columns, key=vtable.get_key())
+	t7 = time.time()
+	print "Time taken to create mtable for candset:", (t7 - t6)
+        out_table.set_property('ltable', ltable)
+        out_table.set_property('rtable', rtable)
+        out_table.set_property('foreign_key_ltable', 'ltable.'+ltable.get_key())
+        out_table.set_property('foreign_key_rtable', 'rtable.'+rtable.get_key())
+	end_time = time.time()
+	print "Time taken to set properties of candset: ", (end_time - t7)
+	print "Total time to block candset: ", (end_time - start_time)
+        return out_table
+
+    # blocking over candidate set
+    def block_candset_opt_1(self, vtable, l_block_attr, r_block_attr):
+        """
+        Block candidate set (virtual MTable) based on l_block_attr, r_block_attr equivalence (similar to equi-join)
+
+        Parameters
+        ----------
+        vtable : MTable
+            Input candidate set
+        l_block_attr, r_block_attr : string,
+            attribute names in ltable, rtable
+
+        Returns
+        -------
+        blocked_table : MTable
+            Containing tuple pairs whose l_block_attr and r_block_attr values are same
+
+        Notes
+        -----
+        Output MTable contains the following three attributes
+            * _id
+            * id column from ltable
+            * id column from rtable
+
+        Also, the properties of blocked table is updated with following key-value pairs
+            * ltable - ref to ltable
+            * rtable - ref to rtable
+            * key
+            * foreign_key_ltable - string, ltable's  id attribute name
+            * foreign_key_rtable - string, rtable's id attribute name
+        """
+	start_time = time.time()
+        # do integrity checks
+        ltable = vtable.get_property('ltable')
+        rtable = vtable.get_property('rtable')
+
+        self.check_attrs(ltable, rtable, l_block_attr, r_block_attr, None, None)
+        l_key = 'ltable.' + ltable.get_key()
+        r_key = 'rtable.' + rtable.get_key()
+
+	t000 = time.time()
+	print "Time taken to do integrity checks:", (t000 - start_time)
+        # convert to dataframes
+        l_df = ltable.to_dataframe()
+        r_df = rtable.to_dataframe()
+
+	t001 = time.time()
+	print "Time taken to convert tables A and B to data frames:", (t001 - t000)
+        # set index for convenience
+        l_df.set_index(ltable.get_key(), inplace=True)
+        r_df.set_index(rtable.get_key(), inplace=True)
+
+	t002 = time.time()
+	print "Time taken to set indexes for tables A and B:", (t002 - t001)
+        if mg._verbose:
+            count = 0
+            per_count = math.ceil(mg._percent/100.0*len(vtable))
+            print per_count
+
+        elif mg._progbar:
+            bar = pyprind.ProgBar(len(vtable))
+
+        column_names = list(vtable.columns)
+        #lid_idx = column_names.index(l_key)
+        #rid_idx = column_names.index(r_key)
+	l_block_attr_idx = column_names.index('ltable.' + l_block_attr)
+	r_block_attr_idx = column_names.index('rtable.' + r_block_attr)
+
+        # create look up table for quick access of rows
+        #l_dict = {}
+        #r_dict = {}
+
+        # keep track of valid ids
+        valid = []
+        # iterate candidate set and process each row
+        for row in vtable.itertuples(index=False):
+            if mg._verbose:
+                count += 1
+                if count%per_count == 0:
+                    print str(mg._percent*count/per_count) + ' percentage done !!!'
+            elif mg._progbar:
+                bar.update()
+
+            # get the value of block attribute from ltuple
+	    #row_lid = row[lid_idx]
+	    #if row_lid not in l_dict:
+	    #	l_dict[row_lid] = row[l_block_attr_idx]
+            #l_val = l_dict[row_lid]
+	    l_val = row[l_block_attr_idx]
+
+            # get the value of block attribute from rtuple
+	    #row_rid = row[rid_idx]
+	    #if row_rid not in r_dict:
+	    #	r_dict[row_rid] = row[r_block_attr_idx]
+            #r_val = r_dict[row_rid]
+            r_val = row[r_block_attr_idx]
+
+            if l_val != np.NaN and r_val != np.NaN:
+                if l_val == r_val:
+                    valid.append(True)
+                else:
+                    valid.append(False)
+            else:
+                valid.append(False)
+        
+	t6 = time.time()
+	print "Time taken to get valid ids:", (t6 - t002)
+        # should be modified
+        if len(vtable) > 0:
+            out_table = MTable(vtable[valid], key=vtable.get_key())
+        else:
+            out_table = MTable(columns=vtable.columns, key=vtable.get_key())
+	t7 = time.time()
+	print "Time taken to create mtable for candset:", (t7 - t6)
+        out_table.set_property('ltable', ltable)
+        out_table.set_property('rtable', rtable)
+        out_table.set_property('foreign_key_ltable', 'ltable.'+ltable.get_key())
+        out_table.set_property('foreign_key_rtable', 'rtable.'+rtable.get_key())
+	end_time = time.time()
+	print "Time taken to set properties of candset: ", (end_time - t7)
+	print "Total time to block candset: ", (end_time - start_time)
+        return out_table
+
+    def block_candset_joblib(self, vtable, l_block_attr, r_block_attr):
+        """
+        Block candidate set (virtual MTable) based on l_block_attr, r_block_attr equivalence (similar to equi-join)
+
+        Parameters
+        ----------
+        vtable : MTable
+            Input candidate set
+        l_block_attr, r_block_attr : string,
+            attribute names in ltable, rtable
+
+        Returns
+        -------
+        blocked_table : MTable
+            Containing tuple pairs whose l_block_attr and r_block_attr values are same
+
+        Notes
+        -----
+        Output MTable contains the following three attributes
+            * _id
+            * id column from ltable
+            * id column from rtable
+
+        Also, the properties of blocked table is updated with following key-value pairs
+            * ltable - ref to ltable
+            * rtable - ref to rtable
+            * key
+            * foreign_key_ltable - string, ltable's  id attribute name
+            * foreign_key_rtable - string, rtable's id attribute name
+        """
+	start_time = time.time()
+        # do integrity checks
+        ltable = vtable.get_property('ltable')
+        rtable = vtable.get_property('rtable')
+
+        self.check_attrs(ltable, rtable, l_block_attr, r_block_attr, None, None)
+        l_key = 'ltable.' + ltable.get_key()
+        r_key = 'rtable.' + rtable.get_key()
+	
+	t000 = time.time()
+	print "Time taken to do integrity checks:", (t000 - start_time)
+
+        # convert to dataframes
+        l_df = ltable.to_dataframe()
+        r_df = rtable.to_dataframe()
+
+	t001 = time.time()
+	print "Time taken to convert tables A and B to data frames:", (t001 - t000)
+
+        # set index for convenience
+        #l_df.set_index(ltable.get_key(), inplace=True)
+        #r_df.set_index(rtable.get_key(), inplace=True)
+
+	t002 = time.time()
+	print "Time taken to set indexes for tables A and B:", (t002 - t001)
+        
+	l_cols = list(l_df)
+	print "Columns in A: ", l_cols
+
+	lid_idx = l_cols.index(ltable.get_key())
+	lbk_idx = l_cols.index(l_block_attr)
+	l_dict = {}
+        for row in l_df.itertuples():
+            l_dict[row[lid_idx]] = row[lbk_idx]
+
+	r_cols = list(r_df)
+	print "Columns in B: ", r_cols
+
+	rid_idx = r_cols.index(rtable.get_key())
+	rbk_idx = r_cols.index(r_block_attr)
+	r_dict = {}
+        for row in r_df.itertuples():
+            r_dict[row[rid_idx]] = row[rbk_idx]
+
+	cpu_count = multiprocessing.cpu_count() 
+
+	t01 = time.time()
+	c_df = vtable.to_dataframe()
+	t0 = time.time()
+	print "Time taken to convert mtable to data frame:", (t0 - t01)
+        c_splits = np.array_split(c_df, cpu_count)
+	t1 = time.time()
+	print "Time taken to split table C:", (t1 - t0)
+    	column_names = list(c_df)
+    	l_key_idx = column_names.index(l_key)
+    	r_key_idx = column_names.index(r_key)
+        valid_splits = Parallel(n_jobs=cpu_count)(delayed(get_valid)(c,
+							    l_dict, r_dict,
+                                                            l_key_idx, r_key_idx)
+							    for c in c_splits)
+	t3 = time.time()
+	print "Time taken to get valid splits:", (t3 - t1)
+	valid = sum(valid_splits, [])
+	t6 = time.time()
+	print "Time taken to combine valid splits:", (t6 - t3)
  
         # should be modified
         if len(vtable) > 0:

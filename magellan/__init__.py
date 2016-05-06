@@ -1,4 +1,5 @@
 # imports
+from magellan.core.catalog import Catalog
 
 __prop__ = True
 
@@ -77,3 +78,9 @@ _progbar = True
 _impute_flag = False
 
 
+# catalog
+
+__version__ = '0.1.0'
+
+
+_catalog = Catalog.Instance()
