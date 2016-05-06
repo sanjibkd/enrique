@@ -81,7 +81,7 @@ def test_ab_block_tables_skd():
     ab_time = time.time()
     print("Created an AE blocker --- %s seconds ---" % (ab_time - b_load_time))
     #C = ab.block_tables_skd(A, B, 'city_posted', 'city_posted', 'city_posted', 'city_posted')
-    C = ab.block_tables_skd(A, B, 'pubYear', 'pubYear', 'pubYear', 'pubYear')
+    C = ab.block_tables(A, B, 'pubYear', 'pubYear', 'pubYear', 'pubYear')
     #C = ab.block_tables_skd(A, B, 'isbn', 'isbn', 'isbn', 'isbn')
     print("Size of candset C: %d" % (len(C)))
     c_time = time.time()
@@ -109,12 +109,12 @@ def test_ab_block_candset_skd():
     B = mg.load_dataset('bikewale_clean', 'ID')
     ab = mg.AttrEquivalenceBlocker()
     #C = ab.block_tables(A, B, 'zipcode', 'zipcode', ['zipcode', 'birth_year'], ['zipcode', 'birth_year'])
-    C = ab.block_tables_skd(A, B, 'city_posted', 'city_posted',
+    C = ab.block_tables_opt(A, B, 'city_posted', 'city_posted',
 	['bike_name', 'city_posted', 'km_driven', 'price', 'color', 'model_year'],
 	['bike_name', 'city_posted', 'km_driven', 'price', 'color', 'model_year'])
     print "Size of C: ", len(C)
     #D = ab.block_candset_skd(C, 'birth_year', 'birth_year')
-    D = ab.block_candset_skd(C, 'model_year', 'model_year')
+    D = ab.block_candset_joblib(C, 'model_year', 'model_year')
     print "Size of D: ", len(D)
     #s1 = sorted(['_id', 'ltable.ID', 'rtable.ID', 'ltable.zipcode', 'ltable.birth_year', 'rtable.zipcode',
     #             'rtable.birth_year'])
