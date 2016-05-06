@@ -1050,7 +1050,7 @@ class AttrEquivalenceBlocker(Blocker):
 	lid_idx = l_cols.index(ltable.get_key())
 	lbk_idx = l_cols.index(l_block_attr)
 	l_dict = {}
-        for row in l_df.itertuples():
+        for row in l_df.itertuples(index=False):
             l_dict[row[lid_idx]] = row[lbk_idx]
 
 	r_cols = list(r_df)
@@ -1059,7 +1059,7 @@ class AttrEquivalenceBlocker(Blocker):
 	rid_idx = r_cols.index(rtable.get_key())
 	rbk_idx = r_cols.index(r_block_attr)
 	r_dict = {}
-        for row in r_df.itertuples():
+        for row in r_df.itertuples(index=False):
             r_dict[row[rid_idx]] = row[rbk_idx]
 
 	cpu_count = multiprocessing.cpu_count() 
