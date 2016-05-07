@@ -22,8 +22,8 @@ from itertools import chain
 #                       suffixes=('_ltable', '_rtable'))
 #    return candset
 
-def get_valid(c_df, l_dict, r_dict, l_key_idx, r_key_idx):
-    print "l_key_idx: ", l_key_idx, "r_key_idx: ", r_key_idx
+def get_valid(c_df, l_df, r_df, l_key, r_key, l_block_attr, r_block_attr):
+    print "l_key: ", l_key, "r_key: ", r_key
     if mg._verbose:
         count = 0
     	per_count = math.ceil(mg._percent/100.0*len(c_df))
@@ -31,6 +31,14 @@ def get_valid(c_df, l_dict, r_dict, l_key_idx, r_key_idx):
 
     elif mg._progbar:
     	bar = pyprind.ProgBar(len(c_df))
+
+    column_names = list(c_df.columns)
+    lid_idx = column_names.index(l_key)
+    rid_idx = column_names.index(r_key)
+
+    # create look up table for quick access of rows
+    l_dict = {}
+    r_dict = {}
 
     # keep track of valid ids
     valid = []
@@ -46,10 +54,16 @@ def get_valid(c_df, l_dict, r_dict, l_key_idx, r_key_idx):
 	    bar.update()
 
     	# get the value of block attribute from ltuple
-    	l_val = l_dict[row[l_key_idx]]
+	row_lid = row[lid_idx]
+	if row_lid not in l_dict:
+	    l_dict[row_lid] = l_df.ix[row_lid, l_block_attr]
+        l_val = l_dict[row_lid]
 
-    	# get the value of block attribute from rtuple
-    	r_val = r_dict[row[r_key_idx]]
+        # get the value of block attribute from rtuple
+	row_rid = row[rid_idx]
+	if row_rid not in r_dict:
+	    r_dict[row_rid] = r_df.ix[row_rid, r_block_attr]
+        r_val = r_dict[row_rid]
 
     	if l_val != np.NaN and r_val != np.NaN and l_val == r_val:
 	    valid.append(True)
@@ -830,13 +844,13 @@ class AttrEquivalenceBlocker(Blocker):
             # get the value of block attribute from ltuple
 	    row_lid = row[lid_idx]
 	    if row_lid not in l_dict:
-		l_dict[row_lid] = row[l_block_attr_idx]
+		l_dict[row_lid] = l_df.ix[row_lid, l_block_attr]
             l_val = l_dict[row_lid]
 
             # get the value of block attribute from rtuple
 	    row_rid = row[rid_idx]
 	    if row_rid not in r_dict:
-		r_dict[row_rid] = row[r_block_attr_idx]
+		r_dict[row_rid] = r_df.ix[row_rid, r_block_attr]
             r_val = r_dict[row_rid]
 
             if l_val != np.NaN and r_val != np.NaN:
@@ -1038,30 +1052,12 @@ class AttrEquivalenceBlocker(Blocker):
 	print "Time taken to convert tables A and B to data frames:", (t001 - t000)
 
         # set index for convenience
-        #l_df.set_index(ltable.get_key(), inplace=True)
-        #r_df.set_index(rtable.get_key(), inplace=True)
+        l_df.set_index(ltable.get_key(), inplace=True)
+        r_df.set_index(rtable.get_key(), inplace=True)
 
 	t002 = time.time()
 	print "Time taken to set indexes for tables A and B:", (t002 - t001)
         
-	l_cols = list(l_df)
-	print "Columns in A: ", l_cols
-
-	lid_idx = l_cols.index(ltable.get_key())
-	lbk_idx = l_cols.index(l_block_attr)
-	l_dict = {}
-        for row in l_df.itertuples(index=False):
-            l_dict[row[lid_idx]] = row[lbk_idx]
-
-	r_cols = list(r_df)
-	print "Columns in B: ", r_cols
-
-	rid_idx = r_cols.index(rtable.get_key())
-	rbk_idx = r_cols.index(r_block_attr)
-	r_dict = {}
-        for row in r_df.itertuples(index=False):
-            r_dict[row[rid_idx]] = row[rbk_idx]
-
 	cpu_count = multiprocessing.cpu_count() 
 
 	t01 = time.time()
@@ -1071,12 +1067,10 @@ class AttrEquivalenceBlocker(Blocker):
         c_splits = np.array_split(c_df, cpu_count)
 	t1 = time.time()
 	print "Time taken to split table C:", (t1 - t0)
-    	column_names = list(c_df)
-    	l_key_idx = column_names.index(l_key)
-    	r_key_idx = column_names.index(r_key)
         valid_splits = Parallel(n_jobs=cpu_count)(delayed(get_valid)(c,
-							    l_dict, r_dict,
-                                                            l_key_idx, r_key_idx)
+							    l_df, r_df,
+                                                            l_key, r_key,
+							    l_block_attr, r_block_attr)
 							    for c in c_splits)
 	t3 = time.time()
 	print "Time taken to get valid splits:", (t3 - t1)
